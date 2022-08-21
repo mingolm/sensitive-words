@@ -29,11 +29,13 @@ func main() {
 	)
 	ctx := context.Background()
 	for word, hit := range map[string]bool{
-		"你这个傻瓜": false,
-		"shazi": true,
-		"傻子":    true,
-		"傻逼":    true,
-		"大傻逼":   true,
+		"你这个傻瓜":    false,
+		"shazi":    true,
+		"傻子":       true,
+		"傻逼":       true,
+		"大傻逼":      true,
+		"方舟子早就该死了": true,
+		"方舟子还活着":   false,
 	} {
 		isHit, hitWord, err := st.Hit(ctx, word)
 		if err != nil {
@@ -51,5 +53,7 @@ func buildWordsCall(ctx context.Context) (words []string, err error) {
 	return []string{
 		"傻逼",
 		"傻子",
+		"司马南|美国", // 组合词
+		"方舟子|死了",
 	}, nil
 }

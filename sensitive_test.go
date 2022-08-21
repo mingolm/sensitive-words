@@ -88,6 +88,11 @@ func TestMatchReplace(t *testing.T) {
 		"你也太丑了吧":      {false, "你也太丑了吧"},
 		"色情直播":        {true, "**直播"},
 		"色--。。。//情直播": {true, "*--。。。//*直播"},
+		"方舟子我问候你全家":   {false, "方舟子我问候你全家"},
+		"方舟子傻逼我问候你全家": {true, "方舟子**我问候你全家"},
+		"方舟子傻逼早就该死了":  {true, "*****早就该**"},
+		"司马南在美国买房子":   {true, "***在**买房子"},
+		"司马南在中国买房子":   {false, "司马南在中国买房子"},
 	} {
 		isHit, newText, err := st.MatchReplace(ctx, text)
 		if err != nil {
@@ -121,5 +126,7 @@ func buildWordsCall(ctx context.Context) (words []string, err error) {
 		"色魔",
 		"傻子",
 		"傻逼",
+		"司马南|美国",
+		"方舟子|死了",
 	}, nil
 }

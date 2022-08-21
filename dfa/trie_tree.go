@@ -1,19 +1,22 @@
 package dfa
 
 import (
+	"strings"
 	"unicode"
 )
 
 type TrieTree struct {
 	root          *Node
+	comboRoot     *Node
 	filterRuneMap map[rune]struct{}
 }
 
 type Node struct {
 	isRoot    bool
 	isEnd     bool
-	Character rune
-	Children  map[rune]*Node
+	character rune
+	words     []string
+	children  map[rune]*Node
 }
 
 func NewTrieTree(filterChars []rune) *TrieTree {
@@ -24,8 +27,13 @@ func NewTrieTree(filterChars []rune) *TrieTree {
 	return &TrieTree{
 		root: &Node{
 			isRoot:    true,
-			Character: '0',
-			Children:  make(map[rune]*Node, 0),
+			character: '0',
+			children:  make(map[rune]*Node, 0),
+		},
+		comboRoot: &Node{
+			isRoot:    true,
+			character: '0',
+			children:  make(map[rune]*Node, 0),
 		},
 		filterRuneMap: filterCharMap,
 	}
@@ -33,41 +41,108 @@ func NewTrieTree(filterChars []rune) *TrieTree {
 
 func (tree *TrieTree) AddWords(words ...string) {
 	for _, word := range words {
-		tree.addWord(word)
+		tree.addWord(false, word)
 	}
 }
 
-func (tree *TrieTree) addWord(word string) {
+func (tree *TrieTree) addWord(isCombo bool, word string) {
 	if word == "" {
 		return
 	}
 
-	cur := tree.root
-	characters := []rune(word)
+	var cur *Node
+	if isCombo {
+		cur = tree.comboRoot
+	} else {
+		cur = tree.root
+	}
+	words := strings.Split(word, "|")
+	characters := []rune(words[0])
 	for position := 0; position < len(characters); position++ {
 		ch := characters[position]
 		if tree.isFilterChar(ch) {
 			continue
 		}
-
-		if next, ok := cur.Children[ch]; ok {
+		if next, ok := cur.children[ch]; ok {
 			cur = next
 		} else {
 			newNode := NewNode(ch)
-			cur.Children[ch] = newNode
+			cur.children[ch] = newNode
 			cur = newNode
 		}
+	}
 
-		if position == len(characters)-1 {
-			cur.isEnd = true
+	cur.isEnd = true
+	// 新增组合词
+	if len(words) > 1 {
+		cur.words = words[1:]
+		for _, word = range words[1:] {
+			tree.addWord(true, word)
 		}
 	}
+}
+
+func (tree *TrieTree) detectInCombo(text string, words ...string) ([]int, bool) {
+	var (
+		parent         = tree.comboRoot
+		cur            *Node
+		found          bool
+		runes          = []rune(text)
+		length         = len(runes)
+		left           = 0
+		filterIndexMap = map[int]struct{}{}
+		wordMap        = make(map[string]struct{}, len(words))
+		indexes        []int
+	)
+	for _, word := range words {
+		wordMap[word] = struct{}{}
+	}
+	for position := 0; position < length; position++ {
+		ch := runes[position]
+		if tree.isFilterChar(ch) {
+			filterIndexMap[position] = struct{}{}
+			continue
+		}
+		cur, found = parent.children[ch]
+
+		if !found || (!cur.IsEnd() && position == length-1) {
+			parent = tree.comboRoot
+			position = left
+			left++
+			continue
+		}
+
+		if cur.IsEnd() && left <= position {
+			var word []rune
+			var indexCh []int
+			for i := left; i <= position; i++ {
+				// 特殊字符不替换
+				if _, ok := filterIndexMap[i]; ok {
+					continue
+				}
+				word = append(word, runes[i])
+				indexCh = append(indexCh, i)
+			}
+			wordStr := string(word)
+			if _, ok := wordMap[wordStr]; ok {
+				delete(wordMap, wordStr)
+				indexes = append(indexes, indexCh...)
+				if len(wordMap) == 0 {
+					return indexes, true
+				}
+			}
+		}
+
+		parent = cur
+	}
+
+	return nil, false
 }
 
 func (tree *TrieTree) Detect(text string, times int) (bool, []string) {
 	var (
 		parent         = tree.root
-		current        *Node
+		cur            *Node
 		found          bool
 		runes          = []rune(text)
 		length         = len(runes)
@@ -83,17 +158,16 @@ func (tree *TrieTree) Detect(text string, times int) (bool, []string) {
 			filterIndexMap[position] = struct{}{}
 			continue
 		}
-		current, found = parent.Children[ch]
+		cur, found = parent.children[ch]
 
-		if !found || (!current.IsEnd() && position == length-1) {
+		if !found || (!cur.IsEnd() && position == length-1) {
 			parent = tree.root
 			position = left
 			left++
 			continue
 		}
 
-		if current.IsEnd() && left <= position {
-			isHit = true
+		if cur.IsEnd() && left <= position {
 			var word []rune
 			for i := left; i <= position; i++ {
 				// 特殊字符不替换
@@ -102,24 +176,33 @@ func (tree *TrieTree) Detect(text string, times int) (bool, []string) {
 				}
 				word = append(word, runes[i])
 			}
-			hitWords = append(hitWords, string(word))
-			times--
+			// 组合词的情况下，需要另外处理
+			if len(cur.words) == 0 {
+				isHit = true
+				hitWords = append(hitWords, string(word))
+				times--
+			} else if _, comboHit := tree.detectInCombo(text, cur.words...); comboHit {
+				isHit = true
+				times -= len(cur.words) + 1
+				hitWords = append(hitWords, string(word))
+				hitWords = append(hitWords, cur.words...)
+			}
 		}
 
-		if times == 0 {
+		if times <= 0 {
 			return isHit, hitWords
 		}
 
-		parent = current
+		parent = cur
 	}
 
-	return times == 0, hitWords
+	return times <= 0, hitWords
 }
 
 func (tree *TrieTree) Replace(text string, replace rune) (bool, string) {
 	var (
 		parent         = tree.root
-		current        *Node
+		cur            *Node
 		runes          = []rune(text)
 		length         = len(runes)
 		left           = 0
@@ -134,27 +217,40 @@ func (tree *TrieTree) Replace(text string, replace rune) (bool, string) {
 			filterIndexMap[position] = struct{}{}
 			continue
 		}
-		current, found = parent.Children[ch]
+		cur, found = parent.children[ch]
 
-		if !found || (!current.IsEnd() && position == length-1) {
+		if !found || (!cur.IsEnd() && position == length-1) {
 			parent = tree.root
 			position = left
 			left++
 			continue
 		}
 
-		if current.IsEnd() && left <= position {
-			isHit = true
-			for i := left; i <= position; i++ {
-				// 特殊字符不替换
-				if _, ok := filterIndexMap[i]; ok {
-					continue
+		if cur.IsEnd() && left <= position {
+			// 组合词的情况下，需要另外处理
+			if len(cur.words) == 0 {
+				isHit = true
+			} else {
+				replaceIndexes, comboHit := tree.detectInCombo(text, cur.words...)
+				if comboHit {
+					isHit = true
 				}
-				runes[i] = replace
+				for _, i := range replaceIndexes {
+					runes[i] = replace
+				}
+			}
+			if isHit {
+				for i := left; i <= position; i++ {
+					// 特殊字符不替换
+					if _, ok := filterIndexMap[i]; ok {
+						continue
+					}
+					runes[i] = replace
+				}
 			}
 		}
 
-		parent = current
+		parent = cur
 	}
 
 	return isHit, string(runes)
@@ -166,7 +262,7 @@ func (tree *TrieTree) DebugInfos() []string {
 		return nil
 	}
 
-	return mapDeepRange([]string{}, "", node.Children)
+	return mapDeepRange([]string{}, "", node.children)
 }
 
 func (tree *TrieTree) isFilterChar(ch rune) bool {
@@ -190,8 +286,8 @@ func (tree *TrieTree) isFilterChar(ch rune) bool {
 
 func NewNode(character rune) *Node {
 	return &Node{
-		Character: character,
-		Children:  make(map[rune]*Node, 0),
+		character: character,
+		children:  make(map[rune]*Node, 0),
 	}
 }
 
@@ -203,8 +299,8 @@ func mapDeepRange(results []string, word string, maps map[rune]*Node) []string {
 	for ch, node := range maps {
 		currentWord := word
 		currentWord += string(ch)
-		if node.Children != nil {
-			results = mapDeepRange(results, currentWord, node.Children)
+		if node.children != nil {
+			results = mapDeepRange(results, currentWord, node.children)
 		}
 		if node.IsEnd() {
 			results = append(results, currentWord)
