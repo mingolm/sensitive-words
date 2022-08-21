@@ -33,28 +33,40 @@ func TestHit(t *testing.T) {
 	}
 }
 
-func TestHitStrict(t *testing.T) {
+func TestHitMust(t *testing.T) {
 	st := New(
 		buildWordsCall,
-		WithMode(ModePinyin, ModeStrict),
+		WithMode(ModePinyin),
 		WithMaskWord('*'),
 		WithRebuildWordsInterval(time.Second*10),
 	)
 	ctx := context.Background()
 	for word, hit := range map[string]bool{
+		"你这个傻子": true,
 		"你这个傻瓜": false,
 		"shazi": true,
 		"傻子":    true,
-		"傻逼":    true,
-		"大傻逼":   false,
+		"大傻逼":   true,
 	} {
-		isHit, hitWord, err := st.Hit(ctx, word)
+		isHit, _, err := st.HitMust(ctx, word, 1)
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Log(fmt.Sprintf("hit: word: %s, hit_word: %s, want: %t, result: %t", word, hitWord, hit, isHit))
+		t.Log(fmt.Sprintf("hit: word: %s, want: %t, result: %t", word, hit, isHit))
 		assert.Equal(t, isHit, hit)
 	}
+
+	isHit, _, err := st.HitMust(ctx, "傻子", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, isHit, true)
+
+	isHit, _, err = st.HitMust(ctx, "傻瓜", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, isHit, false)
 }
 
 func TestMatchReplace(t *testing.T) {

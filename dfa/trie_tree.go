@@ -64,27 +64,28 @@ func (tree *TrieTree) addWord(word string) {
 	}
 }
 
-func (tree *TrieTree) Detect(text string, strict bool) (bool, string) {
+func (tree *TrieTree) Detect(text string, times int) (bool, []string) {
 	var (
-		parent  = tree.root
-		current *Node
-		found   bool
-		runes   = []rune(text)
-		length  = len(runes)
-		left    = 0
+		parent         = tree.root
+		current        *Node
+		found          bool
+		runes          = []rune(text)
+		length         = len(runes)
+		left           = 0
+		filterIndexMap = map[int]struct{}{}
+		hitWords       []string
+		isHit          bool
 	)
 
 	for position := 0; position < length; position++ {
 		ch := runes[position]
 		if tree.isFilterChar(ch) {
+			filterIndexMap[position] = struct{}{}
 			continue
 		}
 		current, found = parent.Children[ch]
 
 		if !found || (!current.IsEnd() && position == length-1) {
-			if strict {
-				return false, ""
-			}
 			parent = tree.root
 			position = left
 			left++
@@ -92,14 +93,27 @@ func (tree *TrieTree) Detect(text string, strict bool) (bool, string) {
 		}
 
 		if current.IsEnd() && left <= position {
+			isHit = true
+			var word []rune
+			for i := left; i <= position; i++ {
+				// 特殊字符不替换
+				if _, ok := filterIndexMap[i]; ok {
+					continue
+				}
+				word = append(word, runes[i])
+			}
+			hitWords = append(hitWords, string(word))
+			times--
+		}
 
-			return true, string(runes[left : position+1])
+		if times == 0 {
+			return isHit, hitWords
 		}
 
 		parent = current
 	}
 
-	return false, ""
+	return times == 0, hitWords
 }
 
 func (tree *TrieTree) Replace(text string, replace rune) (bool, string) {

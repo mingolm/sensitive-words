@@ -12,8 +12,10 @@ import (
 )
 
 type SensitiveWorder interface {
-	// Hit 判断是否命中敏感词
-	Hit(ctx context.Context, word string) (isHit bool, hitWord string, err error)
+	// Hit 判断是否命中敏感词，且返回命中的敏感词
+	Hit(ctx context.Context, text string) (isHit bool, hitWord string, err error)
+	// HitMust 严格模式，最少命中几个敏感词
+	HitMust(ctx context.Context, text string, times int) (isHit bool, hitWords []string, err error)
 	// MatchReplace 敏感词替换
 	MatchReplace(ctx context.Context, text string) (isHit bool, lastText string, err error)
 	// DebugInfos 输出当前所有敏感词
@@ -26,6 +28,7 @@ func New(buildWords BuildWordsFn, opts ...Option) SensitiveWorder {
 	o := options{
 		maskWord:       '*',
 		buildWordsCall: buildWords,
+		mode:           ModePinyin,
 		logger:         zap.S().Named("sensitive"),
 	}
 	for _, fn := range opts {
@@ -101,10 +104,19 @@ func (st *sensitiveWord) buildWords(ctx context.Context) error {
 	return nil
 }
 
-func (st *sensitiveWord) Hit(ctx context.Context, word string) (isHit bool, hitWord string, err error) {
+func (st *sensitiveWord) Hit(ctx context.Context, text string) (isHit bool, hitWord string, err error) {
 	tree := st.trieTree.Load().(*dfa.TrieTree)
-	isHit, hitWord = tree.Detect(word, st.mode.Contain(ModeStrict))
-	return isHit, hitWord, nil
+	isHit, hitWords := tree.Detect(text, 1)
+	if isHit {
+		return true, hitWords[0], nil
+	}
+	return false, "", nil
+}
+
+func (st *sensitiveWord) HitMust(ctx context.Context, text string, times int) (isHit bool, hitWords []string, err error) {
+	tree := st.trieTree.Load().(*dfa.TrieTree)
+	isHit, hitWords = tree.Detect(text, times)
+	return isHit, hitWords, nil
 }
 
 func (st *sensitiveWord) MatchReplace(ctx context.Context, text string) (isHit bool, lastText string, err error) {

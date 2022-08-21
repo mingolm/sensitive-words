@@ -9,11 +9,11 @@ import (
 type options struct {
 	// 掩码字符，默认使用 *
 	maskWord rune
-	// 查找模式
+	// 查找模式，默认开启拼音
 	mode Mode
 	// 过滤特殊字符，默认过滤除中英文数字之外的所有字符
 	filterChars []rune
-	// 定时触发的 callback
+	// 定时触发回调方法间隔
 	rebuildWordsInterval time.Duration
 	// 创建敏感词回调方法
 	buildWordsCall BuildWordsFn
