@@ -19,7 +19,7 @@ type SensitiveWorder interface {
 	// MatchReplace 敏感词替换
 	MatchReplace(ctx context.Context, text string) (isHit bool, lastText string, err error)
 	// DebugInfos 输出当前所有敏感词
-	DebugInfos(ctx context.Context) (words []string)
+	DebugInfos(ctx context.Context) (results []*dfa.Stats)
 }
 
 var _ SensitiveWorder = (*sensitiveWord)(nil)
@@ -82,21 +82,29 @@ func (st *sensitiveWord) buildWords(ctx context.Context) error {
 		return err
 	}
 
-	tree := dfa.NewTrieTree(st.filterChars)
-	// 开启拼音模式
-	if st.mode.Contain(ModePinyin) {
-		for _, word := range words {
-			if !chineseReg.MatchString(word) {
-				continue
+	tree := dfa.NewTrieTree()
+	tree.WithFilterChars(st.filterChars)
+
+	if err = st.mode.Range(func(value Mode) error {
+		switch value {
+		case ModePinyin: // 开启拼音模式
+			for _, word := range words {
+				if !chineseReg.MatchString(word) {
+					continue
+				}
+				word = strings.Replace(word, "|", "", -1)
+				words = append(words, strings.Join(pinyin.LazyConvert(word, nil), ""))
 			}
-			words = append(words, strings.Join(pinyin.LazyConvert(word, nil), ""))
+		case ModeStats: // 开启命中敏感词统计
+			tree.WithStats()
 		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	tree.AddWords(words...)
-
 	st.trieTree.Store(tree)
-
 	st.logger.Debugw("rebuild words success",
 		"end_time", time.Now().Format("2006-01-02 15:04:05"),
 	)
@@ -125,7 +133,7 @@ func (st *sensitiveWord) MatchReplace(ctx context.Context, text string) (isHit b
 	return isHit, lastText, nil
 }
 
-func (st *sensitiveWord) DebugInfos(ctx context.Context) (words []string) {
+func (st *sensitiveWord) DebugInfos(ctx context.Context) (results []*dfa.Stats) {
 	tree := st.trieTree.Load().(*dfa.TrieTree)
 	return tree.DebugInfos()
 }

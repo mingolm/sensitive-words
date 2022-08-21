@@ -6,7 +6,7 @@ import (
 )
 
 func TestFilterChar(t *testing.T) {
-	tree := NewTrieTree(nil)
+	tree := NewTrieTree()
 	runeMap := map[rune]bool{
 		'a': false,
 		'0': false,
@@ -24,7 +24,7 @@ func TestFilterChar(t *testing.T) {
 }
 
 func TestHit(t *testing.T) {
-	tree := NewTrieTree(nil)
+	tree := NewTrieTree()
 	tree.AddWords([]string{
 		"傻逼", "煞笔", "垃圾", "小啦", "傻瓜｜笨猪", "司马南|美国",
 	}...)
@@ -68,11 +68,11 @@ func TestHit(t *testing.T) {
 
 	isHit, hitWords = tree.Detect("司马南否认在美国买房子", 1)
 	assert.Equal(t, isHit, true)
-	assert.Equal(t, hitWords, []string{"司马南", "美国"})
+	assert.Equal(t, hitWords, []string{"司马南|美国"})
 }
 
 func TestReplace(t *testing.T) {
-	tree := NewTrieTree(nil)
+	tree := NewTrieTree()
 	tree.AddWords([]string{
 		"傻逼", "煞笔", "垃圾", "小啦", "司马南|美国", "方舟子|死了",
 	}...)

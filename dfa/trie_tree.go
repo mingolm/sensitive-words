@@ -1,6 +1,7 @@
 package dfa
 
 import (
+	"go.uber.org/atomic"
 	"strings"
 	"unicode"
 )
@@ -8,6 +9,7 @@ import (
 type TrieTree struct {
 	root          *Node
 	comboRoot     *Node
+	openStats     bool
 	filterRuneMap map[rune]struct{}
 }
 
@@ -17,13 +19,16 @@ type Node struct {
 	character rune
 	words     []string
 	children  map[rune]*Node
+	hitCount  atomic.Uint64
 }
 
-func NewTrieTree(filterChars []rune) *TrieTree {
-	filterCharMap := make(map[rune]struct{}, len(filterChars))
-	for _, c := range filterChars {
-		filterCharMap[c] = struct{}{}
-	}
+// Stats 敏感词统计
+type Stats struct {
+	Word     string
+	HitCount uint64
+}
+
+func NewTrieTree() *TrieTree {
 	return &TrieTree{
 		root: &Node{
 			isRoot:    true,
@@ -35,8 +40,22 @@ func NewTrieTree(filterChars []rune) *TrieTree {
 			character: '0',
 			children:  make(map[rune]*Node, 0),
 		},
-		filterRuneMap: filterCharMap,
+		filterRuneMap: map[rune]struct{}{},
 	}
+}
+
+func (tree *TrieTree) WithFilterChars(filterChars []rune) *TrieTree {
+	filterCharMap := make(map[rune]struct{}, len(filterChars))
+	for _, c := range filterChars {
+		filterCharMap[c] = struct{}{}
+	}
+	tree.filterRuneMap = filterCharMap
+	return tree
+}
+
+func (tree *TrieTree) WithStats() *TrieTree {
+	tree.openStats = true
+	return tree
 }
 
 func (tree *TrieTree) AddWords(words ...string) {
@@ -184,9 +203,12 @@ func (tree *TrieTree) Detect(text string, times int) (bool, []string) {
 			} else if _, comboHit := tree.detectInCombo(text, cur.words...); comboHit {
 				isHit = true
 				times -= len(cur.words) + 1
-				hitWords = append(hitWords, string(word))
-				hitWords = append(hitWords, cur.words...)
+				hitWords = append(hitWords, string(word)+"|"+strings.Join(cur.words, "|"))
 			}
+		}
+
+		if isHit {
+			cur.incrStats(tree.openStats)
 		}
 
 		if times <= 0 {
@@ -240,6 +262,7 @@ func (tree *TrieTree) Replace(text string, replace rune) (bool, string) {
 				}
 			}
 			if isHit {
+				cur.incrStats(tree.openStats)
 				for i := left; i <= position; i++ {
 					// 特殊字符不替换
 					if _, ok := filterIndexMap[i]; ok {
@@ -256,13 +279,13 @@ func (tree *TrieTree) Replace(text string, replace rune) (bool, string) {
 	return isHit, string(runes)
 }
 
-func (tree *TrieTree) DebugInfos() []string {
+func (tree *TrieTree) DebugInfos() []*Stats {
 	node := tree.root
 	if node == nil {
 		return nil
 	}
 
-	return mapDeepRange([]string{}, "", node.children)
+	return mapDeepRange([]*Stats{}, "", node.children)
 }
 
 func (tree *TrieTree) isFilterChar(ch rune) bool {
@@ -295,15 +318,28 @@ func (node *Node) IsEnd() bool {
 	return node.isEnd
 }
 
-func mapDeepRange(results []string, word string, maps map[rune]*Node) []string {
-	for ch, node := range maps {
+func (node *Node) incrStats(openStats bool) {
+	if !openStats {
+		return
+	}
+	node.hitCount.Inc()
+}
+
+func mapDeepRange(results []*Stats, word string, maps map[rune]*Node) []*Stats {
+	for ch, cur := range maps {
 		currentWord := word
 		currentWord += string(ch)
-		if node.children != nil {
-			results = mapDeepRange(results, currentWord, node.children)
+		if cur.children != nil {
+			results = mapDeepRange(results, currentWord, cur.children)
 		}
-		if node.IsEnd() {
-			results = append(results, currentWord)
+		if cur.IsEnd() {
+			if len(cur.words) > 0 {
+				currentWord += "|" + strings.Join(cur.words, "|")
+			}
+			results = append(results, &Stats{
+				Word:     currentWord,
+				HitCount: cur.hitCount.Load(),
+			})
 		}
 	}
 	return results

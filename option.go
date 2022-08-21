@@ -9,7 +9,7 @@ import (
 type options struct {
 	// 掩码字符，默认使用 *
 	maskWord rune
-	// 查找模式，默认开启拼音
+	// 查找/替换模式，默认开启拼音
 	mode Mode
 	// 过滤特殊字符，默认过滤除中英文数字之外的所有字符
 	filterChars []rune
