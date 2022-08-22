@@ -70,8 +70,8 @@ func main() {
 		// 输出：word: 方舟子|死了, hit_count: 0
 		// 输出：word: choubaguai, hit_count: 0
 		// 输出：word: choubi, hit_count: 0
-		// 输出：word: simananmeiguo, hit_count: 0
-		// 输出：word: fangzhouzisile, hit_count: 0
+		// 输出：word: simanan|meiguo, hit_count: 0
+		// 输出：word: fangzhouzi|sile, hit_count: 0
 		fmt.Printf("word: %s, hit_count: %d\n", info.Word, info.HitCount)
 	}
 

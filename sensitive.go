@@ -89,11 +89,14 @@ func (st *sensitiveWord) buildWords(ctx context.Context) error {
 		switch value {
 		case ModePinyin: // 开启拼音模式
 			for _, word := range words {
-				if !chineseReg.MatchString(word) {
+				if !pinyinWordReg.MatchString(word) {
 					continue
 				}
-				word = strings.Replace(word, "|", "", -1)
-				words = append(words, strings.Join(pinyin.LazyConvert(word, nil), ""))
+				var pinyinWords []string
+				for _, segWord := range strings.Split(word, "|") {
+					pinyinWords = append(pinyinWords, strings.Join(pinyin.LazyConvert(segWord, nil), ""))
+				}
+				words = append(words, strings.Join(pinyinWords, "|"))
 			}
 		case ModeStats: // 开启命中敏感词统计
 			tree.WithStats()
